@@ -47,7 +47,7 @@
       display: block;
     }
 
-    input {
+    input, select {
       width: 100%;
       padding: 13px;
       margin-top: 8px;
@@ -101,7 +101,6 @@
       margin-top: 20px;
       color: #555;
       font-style: italic;
-      min-height: 20px;
     }
 
     .error {
@@ -125,20 +124,28 @@
       color: #555;
     }
 
-    ul { padding-left: 20px; }
+    ul {
+      margin: 0;
+      padding-left: 20px;
+    }
+
+    li {
+      margin-bottom: 6px;
+    }
 
     .download {
-      margin-top: 22px;
-      text-align: right;
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 18px;
     }
 
     .download button {
-      width: auto;
-      padding: 10px 16px;
+      padding: 10px 14px;
       font-size: 14px;
+      border-radius: 8px;
       background: #22c55e;
       color: white;
-      border-radius: 8px;
     }
   </style>
 </head>
@@ -154,14 +161,21 @@
     <input id="goal" placeholder="e.g. Prepare for TCS NQT" />
 
     <div class="examples">
-      <span class="example" onclick="setGoal('Prepare for TCS NQT')">Prepare for TCS NQT</span>
+      <span class="example" onclick="setGoal('Prepare for TCS NQT')">TCS NQT</span>
       <span class="example" onclick="setGoal('Learn Python in 30 days')">Learn Python</span>
-      <span class="example" onclick="setGoal('Improve fitness habits')">Improve fitness</span>
-      <span class="example" onclick="setGoal('Prepare for final exams')">Final exams</span>
+      <span class="example" onclick="setGoal('Improve fitness habits')">Fitness</span>
+      <span class="example" onclick="setGoal('Prepare for final exams')">Final Exams</span>
     </div>
 
     <label>📅 Duration (1–365 days)</label>
     <input id="days" type="number" placeholder="e.g. 30" />
+
+    <label>📊 Plan Level</label>
+    <select id="level">
+      <option>Beginner</option>
+      <option>Intermediate</option>
+      <option>Intensive</option>
+    </select>
 
     <div class="buttons">
       <button class="primary" onclick="generatePlan()">Build My Action Plan</button>
@@ -172,9 +186,9 @@
       <h3>⚙️ How this works</h3>
       <ol>
         <li>You enter a goal and duration</li>
-        <li>An AI agent understands your intent</li>
-        <li>The agent breaks it into daily actions</li>
-        <li>You receive a structured plan</li>
+        <li>The AI confirms your intent</li>
+        <li>The agent builds a structured plan</li>
+        <li>You receive actionable daily steps</li>
       </ol>
     </div>
 
@@ -182,123 +196,138 @@
     <div id="error" class="error"></div>
 
     <div id="empty" class="empty">
-      👋 <strong>Welcome!</strong><br />
-      Enter a goal and duration to generate your personalized plan.
+      👋 Welcome! Enter a goal and duration to begin.
     </div>
 
     <div id="result"></div>
   </div>
 
-  <script>
-    let lastPlan = null;
-    let interval = null;
+<script>
+let lastPlan = null;
+let interval = null;
 
-    function setGoal(text) {
-      document.getElementById("goal").value = text;
-    }
+function setGoal(text) {
+  document.getElementById("goal").value = text;
+}
 
-    async function generatePlan() {
-      const goal = document.getElementById("goal").value.trim();
-      const days = Number(document.getElementById("days").value);
-      const loading = document.getElementById("loading");
-      const error = document.getElementById("error");
-      const result = document.getElementById("result");
-      const empty = document.getElementById("empty");
+async function generatePlan() {
+  const goal = document.getElementById("goal").value.trim();
+  const days = Number(document.getElementById("days").value);
+  const level = document.getElementById("level").value;
 
-      error.textContent = "";
-      result.innerHTML = "";
+  const loading = document.getElementById("loading");
+  const error = document.getElementById("error");
+  const result = document.getElementById("result");
+  const empty = document.getElementById("empty");
 
-      if (!goal) {
-        error.textContent = "Please enter a goal.";
-        return;
+  error.textContent = "";
+  result.innerHTML = "";
+
+  if (!goal || !days || days < 1 || days > 365) {
+    error.textContent = "Please enter valid goal and duration.";
+    return;
+  }
+
+  empty.style.display = "none";
+
+  const messages = [
+    "🤔 Understanding your goal...",
+    "🧠 Confirming intent...",
+    "📋 Building your plan...",
+    "⚡ Almost ready..."
+  ];
+
+  let i = 0;
+  loading.textContent = messages[i];
+  interval = setInterval(() => {
+    i = (i + 1) % messages.length;
+    loading.textContent = messages[i];
+  }, 1200);
+
+  try {
+    const response = await fetch(
+      "https://ai-task-planner-api.onrender.com/plan",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ goal, days, level })
       }
+    );
 
-      if (!days || days < 1 || days > 365) {
-        error.textContent = "Please enter a valid duration (1–365 days).";
-        return;
-      }
+    const data = await response.json();
+    lastPlan = data;
 
-      empty.style.display = "none";
+    clearInterval(interval);
+    loading.textContent = "";
 
-      const messages = [
-        "🤔 Understanding your goal...",
-        "🧩 Breaking it into daily actions...",
-        "⚡ AI agent building your plan...",
-        "📋 Almost ready..."
-      ];
+    result.innerHTML = `
+      <div class="card">
+        <h3>🧠 AI Understanding</h3>
+        <p><em>${data.intent_confirmation}</em></p>
+      </div>
 
-      let i = 0;
-      loading.textContent = messages[i];
-      interval = setInterval(() => {
-        i = (i + 1) % messages.length;
-        loading.textContent = messages[i];
-      }, 1200);
+      <div class="card">
+        <h3>📌 Plan Summary</h3>
+        <p>${data.goal_summary}</p>
+        <p><strong>Total Days:</strong> ${data.total_days}</p>
+      </div>
 
-      try {
-        const response = await fetch(
-          "https://ai-task-planner-api.onrender.com/plan",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ goal, days })
-          }
-        );
+      <div class="card">
+        <h3>🗓 Daily Tasks</h3>
+        <ul>${data.daily_tasks.map(t => `<li>${t}</li>`).join("")}</ul>
+      </div>
 
-        const data = await response.json();
-        lastPlan = data;
+      <div class="card">
+        <h3>💡 Smart Tips</h3>
+        <ul>${data.tips.map(t => `<li>${t}</li>`).join("")}</ul>
+      </div>
 
-        clearInterval(interval);
-        loading.textContent = "";
+      <div class="card">
+        <h3>✅ Why this plan works</h3>
+        <p>${data.why_this_works}</p>
+      </div>
 
-        result.innerHTML = `
-          <div class="card">
-            <h3>📌 Plan Summary</h3>
-            <p>${data.goal_summary}</p>
-            <p><strong>Total Days:</strong> ${data.total_days}</p>
-          </div>
+      <div class="download">
+        <button onclick="downloadJSON()">JSON</button>
+        <button onclick="downloadTXT()">TXT</button>
+      </div>
+    `;
+  } catch {
+    clearInterval(interval);
+    loading.textContent = "";
+    error.textContent = "Something went wrong. Please try again.";
+  }
+}
 
-          <div class="card">
-            <h3>🗓 Daily Tasks</h3>
-            <ul>${data.daily_tasks.map(t => `<li>${t}</li>`).join("")}</ul>
-          </div>
+function downloadJSON() {
+  const blob = new Blob([JSON.stringify(lastPlan, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "ai-task-plan.json";
+  a.click();
+}
 
-          <div class="card">
-            <h3>💡 Smart Tips</h3>
-            <ul>${data.tips.map(t => `<li>${t}</li>`).join("")}</ul>
-          </div>
+function downloadTXT() {
+  const text = `
+${lastPlan.goal_summary}
 
-          <div class="download">
-            <button onclick="downloadPlan()">⬇ Download Plan</button>
-          </div>
-        `;
-      } catch {
-        clearInterval(interval);
-        loading.textContent = "";
-        error.textContent = "Something went wrong. Please try again.";
-      }
-    }
+${lastPlan.daily_tasks.join("\n")}
+  `;
+  const blob = new Blob([text], { type: "text/plain" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "ai-task-plan.txt";
+  a.click();
+}
 
-    function downloadPlan() {
-      if (!lastPlan) return;
-      const blob = new Blob([JSON.stringify(lastPlan, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "ai-task-plan.json";
-      a.click();
-      URL.revokeObjectURL(url);
-    }
-
-    function resetForm() {
-      document.getElementById("goal").value = "";
-      document.getElementById("days").value = "";
-      document.getElementById("result").innerHTML = "";
-      document.getElementById("error").textContent = "";
-      document.getElementById("loading").textContent = "";
-      document.getElementById("empty").style.display = "block";
-      lastPlan = null;
-      if (interval) clearInterval(interval);
-    }
-  </script>
+function resetForm() {
+  document.getElementById("goal").value = "";
+  document.getElementById("days").value = "";
+  document.getElementById("result").innerHTML = "";
+  document.getElementById("error").textContent = "";
+  document.getElementById("loading").textContent = "";
+  document.getElementById("empty").style.display = "block";
+}
+</script>
 </body>
 </html>
