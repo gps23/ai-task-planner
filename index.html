@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>AI Task Planner</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: "Segoe UI", sans-serif;
+      background: linear-gradient(135deg, #eef2ff, #f8fafc);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+
+    .app {
+      background: white;
+      max-width: 720px;
+      width: 100%;
+      border-radius: 18px;
+      padding: 32px;
+      box-shadow: 0 20px 45px rgba(0,0,0,0.12);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 30px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .subtitle {
+      color: #555;
+      margin: 12px 0 26px;
+      font-size: 15px;
+    }
+
+    label {
+      font-weight: 600;
+      margin-top: 18px;
+      display: block;
+    }
+
+    input {
+      width: 100%;
+      padding: 13px;
+      margin-top: 8px;
+      border-radius: 10px;
+      border: 1px solid #ccc;
+      font-size: 15px;
+    }
+
+    .examples {
+      margin-top: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .example {
+      background: #eef2ff;
+      color: #3730a3;
+      padding: 7px 12px;
+      border-radius: 20px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .example:hover {
+      background: #e0e7ff;
+    }
+
+    .buttons {
+      display: flex;
+      gap: 12px;
+      margin-top: 28px;
+    }
+
+    button {
+      flex: 1;
+      padding: 15px;
+      border: none;
+      border-radius: 12px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .primary {
+      background: #4f46e5;
+      color: white;
+    }
+
+    .primary:hover {
+      background: #4338ca;
+    }
+
+    .secondary {
+      background: #e5e7eb;
+    }
+
+    .secondary:hover {
+      background: #d1d5db;
+    }
+
+    .loading {
+      margin-top: 20px;
+      color: #555;
+      font-style: italic;
+      min-height: 20px;
+    }
+
+    .error {
+      color: red;
+      margin-top: 15px;
+    }
+
+    .card {
+      background: #f8fafc;
+      padding: 18px;
+      border-radius: 12px;
+      margin-top: 22px;
+    }
+
+    .card h3 {
+      margin: 0 0 10px;
+      font-size: 18px;
+    }
+
+    .empty {
+      margin-top: 30px;
+      padding: 22px;
+      background: #f1f5f9;
+      border-radius: 12px;
+      text-align: center;
+      color: #555;
+    }
+
+    ul, ol {
+      margin: 0;
+      padding-left: 20px;
+    }
+
+    li {
+      margin-bottom: 6px;
+    }
+
+    .download {
+      margin-top: 22px;
+      text-align: right;
+    }
+
+    .download button {
+      width: auto;
+      padding: 10px 16px;
+      font-size: 14px;
+      background: #22c55e;
+      color: white;
+      border-radius: 8px;
+    }
+
+    .result {
+      animation: fadeIn 0.4s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app">
+    <h1>🧠 AI Task Planner</h1>
+    <p class="subtitle">
+      Turn your goal into a clear, structured action plan using an AI agent.
+    </p>
+
+    <label>🎯 Your Goal</label>
+    <input id="goal" placeholder="e.g. Prepare for TCS NQT" />
+
+    <div class="examples">
+      <span class="example" onclick="setGoal('Prepare for TCS NQT')">Prepare for TCS NQT</span>
+      <span class="example" onclick="setGoal('Learn Python in 30 days')">Learn Python</span>
+      <span class="example" onclick="setGoal('Improve fitness habits')">Improve fitness</span>
+      <span class="example" onclick="setGoal('Prepare for final exams')">Final exams</span>
+    </div>
+
+    <label>📅 Duration (1–365 days)</label>
+    <input id="days" type="number" placeholder="e.g. 30" />
+
+    <div class="buttons">
+      <button class="primary" onclick="generatePlan()">Build My Action Plan</button>
+      <button class="secondary" onclick="resetForm()">Reset</button>
+    </div>
+
+    <!-- HOW THIS WORKS -->
+    <div class="card">
+      <h3>⚙️ How this works</h3>
+      <ol style="color:#444">
+        <li>You enter a goal and time duration</li>
+        <li>An AI agent understands your intent</li>
+        <li>The agent breaks it into daily actions</li>
+        <li>You receive a structured, downloadable plan</li>
+      </ol>
+    </div>
+
+    <div id="loading" class="loading"></div>
+    <div id="error" class="error"></div>
+
+    <div id="empty" class="empty">
+      👋 <strong>Welcome!</strong><br />
+      Enter a goal and duration to generate your personalized plan.
+    </div>
+
+    <div id="result" class="result"></div>
+  </div>
+
+  <script>
+    let lastPlan = null;
+    let interval = null;
+
+    function setGoal(text) {
+      document.getElementById("goal").value = text;
+    }
+
+    async function generatePlan() {
+      const goal = document.getElementById("goal").value.trim();
+      const days = Number(document.getElementById("days").value);
+      const loading = document.getElementById("loading");
+      const error = document.getElementById("error");
+      const result = document.getElementById("result");
+      const empty = document.getElementById("empty");
+
+      error.textContent = "";
+      result.innerHTML = "";
+
+      if (!goal) {
+        error.textContent = "Please enter a goal.";
+        return;
+      }
+
+      if (!days || days < 1 || days > 365) {
+        error.textContent = "Please enter a valid duration (1–365 days).";
+        return;
+      }
+
+      empty.style.display = "none";
+
+      const messages = [
+        "🤔 Understanding your goal...",
+        "🧩 Breaking it into daily actions...",
+        "⚡ Your AI agent is building the plan...",
+        "📋 Almost ready..."
+      ];
+
+      let i = 0;
+      loading.textContent = messages[i];
+      interval = setInterval(() => {
+        i = (i + 1) % messages.length;
+        loading.textContent = messages[i];
+      }, 1200);
+
+      try {
+        const response = await fetch("http://127.0.0.1:8000/plan", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ goal, days })
+        });
+
+        const data = await response.json();
+        lastPlan = data;
+
+        clearInterval(interval);
+        loading.textContent = "";
+
+        result.innerHTML = `
+          <div class="card">
+            <h3>📌 Plan Summary</h3>
+            <p>${data.goal_summary}</p>
+            <p><strong>Total Days:</strong> ${data.total_days}</p>
+          </div>
+
+          <div class="card">
+            <h3>🗓 Daily Tasks</h3>
+            <ul>${data.daily_tasks.map(t => `<li>${t}</li>`).join("")}</ul>
+          </div>
+
+          <div class="card">
+            <h3>💡 Smart Tips</h3>
+            <ul>${data.tips.map(t => `<li>${t}</li>`).join("")}</ul>
+          </div>
+
+          <div class="download">
+            <button onclick="downloadPlan()">⬇ Download Plan</button>
+          </div>
+        `;
+      } catch {
+        clearInterval(interval);
+        loading.textContent = "";
+        error.textContent = "Something went wrong. Please try again.";
+      }
+    }
+
+    function downloadPlan() {
+      if (!lastPlan) return;
+      const text = JSON.stringify(lastPlan, null, 2);
+      const blob = new Blob([text], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "ai-task-plan.json";
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function resetForm() {
+      document.getElementById("goal").value = "";
+      document.getElementById("days").value = "";
+      document.getElementById("result").innerHTML = "";
+      document.getElementById("error").textContent = "";
+      document.getElementById("loading").textContent = "";
+      document.getElementById("empty").style.display = "block";
+      lastPlan = null;
+      if (interval) clearInterval(interval);
+    }
+  </script>
+</body>
+</html>
