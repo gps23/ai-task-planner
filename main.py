@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 # ---------------- FASTAPI APP ----------------
 app = FastAPI(title="AI Task Planner API")
 
-# ---------------- MODELS ----------------
+# ---------------- REQUEST / RESPONSE MODELS ----------------
 class PlanRequest(BaseModel):
     goal: str = Field(..., min_length=3)
     days: int = Field(..., ge=1, le=365)
@@ -28,60 +28,77 @@ class PlanResponse(BaseModel):
     tips: List[str]
     why_this_works: str
 
-# ---------------- AGENT ----------------
+# ---------------- AI AGENT ----------------
 agent = Agent(
     model=GroqModel("llama-3.1-8b-instant"),
     system_prompt=(
         "You are a planning AI agent. "
-        "You first confirm user intent, then generate a structured plan."
+        "You MUST return valid JSON only."
     )
 )
 
-# ---------------- FALLBACK ----------------
+# ---------------- FALLBACK PLAN ----------------
 def fallback_plan(goal: str, days: int, level: str) -> PlanResponse:
-    logger.warning("Fallback plan used")
+    logger.warning("Using fallback plan")
+
     return PlanResponse(
         intent_confirmation=f"I will create a {days}-day {level.lower()} plan for {goal}.",
-        goal_summary=f"{days}-day plan for {goal}",
+        goal_summary=f"{days}-day {level.lower()} plan for {goal}",
         total_days=days,
         daily_tasks=[
-            "Review fundamentals",
+            "Understand core concepts",
             "Practice key problems",
-            "Revise mistakes",
-            "Track progress"
+            "Review mistakes",
+            "Revise important topics",
+            "Track daily progress"
         ],
         tips=[
-            "Stay consistent",
+            "Stay consistent every day",
             "Focus on weak areas",
-            "Revise regularly"
+            "Revise regularly",
+            "Avoid burnout"
         ],
-        why_this_works="This fallback plan ensures steady progress even if AI generation fails."
+        why_this_works="This plan balances learning, practice, and revision for steady improvement."
     )
 
-# ---------------- ROUTES ----------------
+# ---------------- HEALTH CHECK ----------------
 @app.get("/health")
 def health():
     return {"status": "ok"}
 
+# ---------------- MAIN PLAN ENDPOINT ----------------
 @app.post("/plan", response_model=PlanResponse)
 async def create_plan(req: PlanRequest):
-    logger.info(f"Plan request: {req.goal}, {req.days}, level={req.level}")
+    logger.info(
+        f"Plan request received | goal={req.goal}, days={req.days}, level={req.level}"
+    )
 
     prompt = f"""
-Confirm intent in one sentence.
-Then generate a {req.days}-day {req.level} level plan for: {req.goal}
+You must return ONLY valid JSON.
 
-Return:
-- intent confirmation
-- short goal summary
-- daily tasks (list)
-- smart tips (list)
-- why this plan works (1 sentence)
+Required JSON schema:
+{{
+  "intent_confirmation": string,
+  "goal_summary": string,
+  "daily_tasks": list[string],
+  "tips": list[string],
+  "why_this_works": string
+}}
+
+Task:
+Confirm user intent in ONE sentence.
+Then generate a {req.days}-day {req.level} level plan for the goal:
+"{req.goal}"
 """
 
     for attempt in range(2):  # retry once
         try:
+            logger.info(f"Agent attempt {attempt + 1}")
             response = await agent.run(prompt)
+
+            if not isinstance(response.data, dict):
+                raise ValueError("Agent response is not JSON")
+
             data = response.data
 
             return PlanResponse(
@@ -97,4 +114,5 @@ Return:
             logger.error(f"Attempt {attempt + 1} failed: {e}")
             await asyncio.sleep(1)
 
+    # If all attempts fail
     return fallback_plan(req.goal, req.days, req.level)
