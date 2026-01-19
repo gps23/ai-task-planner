@@ -4,6 +4,7 @@ from typing import List
 import logging
 import asyncio
 
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic_ai import Agent
 from pydantic_ai.models.groq import GroqModel
 
@@ -13,6 +14,15 @@ logger = logging.getLogger(__name__)
 
 # ---------------- FASTAPI APP ----------------
 app = FastAPI(title="AI Task Planner API")
+
+# ✅ CORS (THIS WAS MISSING)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],   # allow Netlify
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # ---------------- REQUEST / RESPONSE MODELS ----------------
 class PlanRequest(BaseModel):
@@ -70,13 +80,13 @@ def health():
 @app.post("/plan", response_model=PlanResponse)
 async def create_plan(req: PlanRequest):
     logger.info(
-        f"Plan request received | goal={req.goal}, days={req.days}, level={req.level}"
+        f"Plan request | goal={req.goal}, days={req.days}, level={req.level}"
     )
 
     prompt = f"""
 You must return ONLY valid JSON.
 
-Required JSON schema:
+JSON schema:
 {{
   "intent_confirmation": string,
   "goal_summary": string,
@@ -87,13 +97,12 @@ Required JSON schema:
 
 Task:
 Confirm user intent in ONE sentence.
-Then generate a {req.days}-day {req.level} level plan for the goal:
+Then generate a {req.days}-day {req.level} level plan for:
 "{req.goal}"
 """
 
-    for attempt in range(2):  # retry once
+    for attempt in range(2):
         try:
-            logger.info(f"Agent attempt {attempt + 1}")
             response = await agent.run(prompt)
 
             if not isinstance(response.data, dict):
@@ -114,5 +123,4 @@ Then generate a {req.days}-day {req.level} level plan for the goal:
             logger.error(f"Attempt {attempt + 1} failed: {e}")
             await asyncio.sleep(1)
 
-    # If all attempts fail
     return fallback_plan(req.goal, req.days, req.level)
